@@ -3,127 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QGallery - Proyección en Vivo</title>
-    <!-- Supabase JS CDN -->
+    <title>QGallery - Proyección</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Librería para generar el QR en la pantalla web -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { margin: 0; background-color: #050505; color: #fff; overflow: hidden; display: flex; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .slide-container { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; height: 100%; }
-        #sliderImage { max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); animation: fadeIn 1s; }
-        .sidebar { width: 320px; background: #111; border-left: 1px solid #222; display: flex; flex-direction: column; justify-content: space-between; padding: 30px; box-sizing: border-box; text-align: center; }
-        h1 { font-size: 22px; margin-bottom: 5px; color: #3b82f6; }
-        p { color: #888; font-size: 14px; }
-        #qrcode { background: #fff; padding: 15px; border-radius: 12px; display: inline-block; margin: 20px auto; }
-        .loading { font-size: 20px; color: #666; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        body { margin: 0; background-color: #0b0f19; color: #fff; display: flex; height: 100vh; font-family: sans-serif; overflow: hidden; }
+        .main-screen { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
+        #slideImage { max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .side-panel { width: 320px; background: #111827; border-left: 1px solid #1f2937; display: flex; flex-direction: column; justify-content: space-between; padding: 30px; box-sizing: border-box; text-align: center; }
+        h2 { color: #60a5fa; font-size: 20px; margin-bottom: 5px; }
+        p { color: #9ca3af; font-size: 13px; }
+        #qrcode { background: #fff; padding: 12px; border-radius: 10px; display: inline-block; margin: 20px auto; }
+        #statusMessage { font-size: 18px; color: #ef4444; position: absolute; padding: 20px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <div class="slide-container">
-        <div id="status" class="loading">Cargando fotografías de la galería...</div>
-        <img id="sliderImage" src="" alt="Foto en vivo" style="display:none;">
+    <div class="main-screen">
+        <div id="statusMessage">Conectando a Supabase...</div>
+        <img id="slideImage" src="" alt="" style="display:none;">
     </div>
 
-    <div class="sidebar">
+    <div class="side-panel">
         <div>
-            <h1 id="galleryTitle">QGallery</h1>
-            <p>Escanea para unirte y subir tus fotos al instante</p>
+            <h2 id="galleryTitle">QGallery</h2>
+            <p>Escanea el código para subir tus fotos</p>
         </div>
         <div id="qrcode"></div>
         <div>
-            <p style="font-size: 12px;">Transmisión sincronizada en tiempo real</p>
+            <p style="font-size: 11px;">Modo Proyección en Vivo</p>
         </div>
     </div>
 
     <script>
-        // Tus credenciales reales de Supabase
         const SUPABASE_URL = 'https://okbiomrgknyiseglfnih.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rYmlvbXJna255aXNlZ2lmbmloIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyOTQ3MjEsImV4cCI6MjEwNTg3MDcyMX0.wWha0ewnwGVIpS_8osI8nYnGFIQsUcf03vb4kPCV-T8';
-        
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+        const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const urlParams = new URLSearchParams(window.location.search);
         const galleryId = urlParams.get('id');
 
         let photos = [];
         let currentIndex = 0;
-        let slideInterval;
+        let timer = null;
 
-        async function init() {
+        async function startApp() {
+            const statusEl = document.getElementById('statusMessage');
+
             if (!galleryId) {
-                document.getElementById('status').innerText = "Error: No se especificó el ID de la galería en la URL.";
+                statusEl.innerText = "Error: Falta el parámetro ?id= en la URL";
                 return;
             }
 
-            // 1. Obtener detalles de la galería y su token QR
-            const { data: galleryData } = await supabaseClient
-                .from('galleries')
-                .select('title, qr_token')
-                .eq('id', galleryId)
-                .single();
+            try {
+                // 1. Cargar datos de la galería
+                const { data: gal, error: galError } = await client.from('galleries').select('title, qr_token').eq('id', galleryId).single();
+                
+                if (galError) {
+                    statusEl.innerText = "Error DB Galerías: " + galError.message;
+                    return;
+                }
 
-            if (galleryData) {
-                document.getElementById('galleryTitle').innerText = galleryData.title;
-                // Generar el QR lateral con el token de la galería
-                new QRCode(document.getElementById("qrcode"), {
-                    text: galleryData.qr_token || galleryId,
-                    width: 180,
-                    height: 180
-                });
+                if (gal) {
+                    document.getElementById('galleryTitle').innerText = gal.title || "Galería";
+                    
+                    // Limpiar QR previo por si acaso y generar
+                    document.getElementById("qrcode").innerHTML = "";
+                    new QRCode(document.getElementById("qrcode"), {
+                        text: gal.qr_token || galleryId,
+                        width: 160,
+                        height: 160
+                    });
+                }
+
+                await loadPhotos();
+
+                // 2. Tiempo real con Supabase WebSockets
+                client.channel('public:photos')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'photos', filter: `gallery_id=eq.${galleryId}` }, () => {
+                        loadPhotos();
+                    })
+                    .subscribe();
+
+            } catch (err) {
+                statusEl.innerText = "Excepción: " + err.message;
             }
-
-            // 2. Cargar fotos iniciales
-            await fetchPhotos();
-
-            // 3. Escuchar cambios en tiempo real (Realtime WebSockets de Supabase)
-            supabaseClient
-                .channel('public:photos')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'photos', filter: `gallery_id=eq.${galleryId}` }, payload => {
-                    fetchPhotos(); // Recarga automática si alguien sube o aprueba una foto
-                })
-                .subscribe();
         }
 
-        async function fetchPhotos() {
-            const { data, error } = await supabaseClient
-                .from('photos')
-                .select('image_url')
-                .eq('gallery_id', galleryId)
-                .eq('status', 'APPROVED')
-                .order('created_at', { ascending: false });
+        async function loadPhotos() {
+            const statusEl = document.getElementById('statusMessage');
+            const { data, error } = await client.from('photos').select('image_url').eq('gallery_id', galleryId).eq('status', 'APPROVED').order('created_at', { ascending: false });
+            
+            if (error) {
+                statusEl.style.display = 'block';
+                statusEl.innerText = "Error cargando fotos: " + error.message;
+                return;
+            }
 
             if (data && data.length > 0) {
                 photos = data.map(p => p.image_url);
-                document.getElementById('status').style.display = 'none';
-                const img = document.getElementById('sliderImage');
+                statusEl.style.display = 'none';
+                const img = document.getElementById('slideImage');
                 if (img.style.display === 'none') {
                     img.style.display = 'block';
-                    showPhoto();
-                    startSlideShow();
+                    showNext();
+                    if (!timer) timer = setInterval(showNext, 5000);
                 }
             } else {
-                document.getElementById('status').style.display = 'block';
-                document.getElementById('status').innerText = "Esperando fotos aprobadas...";
-                document.getElementById('sliderImage').style.display = 'none';
+                statusEl.style.display = 'block';
+                statusEl.innerText = "Esperando fotos aprobadas...";
+                document.getElementById('slideImage').style.display = 'none';
             }
         }
 
-        function showPhoto() {
+        function showNext() {
             if (photos.length === 0) return;
-            const img = document.getElementById('sliderImage');
+            const img = document.getElementById('slideImage');
             img.src = photos[currentIndex];
             currentIndex = (currentIndex + 1) % photos.length;
         }
 
-        function startSlideShow() {
-            if (slideInterval) clearInterval(slideInterval);
-            slideInterval = setInterval(showPhoto, 5000); // Rota de foto cada 5 segundos
-        }
-
-        init();
+        startApp();
     </script>
 </body>
 </html>
