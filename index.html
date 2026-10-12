@@ -9,32 +9,53 @@
     <!-- Generador de QR -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { margin: 0; background-color: #050505; color: #fff; display: flex; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
-        .main-screen { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
-        #slideImage { max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); animation: fadeIn 1s; }
-        .side-panel { width: 340px; background: #111; border-left: 1px solid #222; display: flex; flex-direction: column; justify-content: space-between; padding: 30px; box-sizing: border-box; text-align: center; }
-        h2 { color: #3b82f6; font-size: 22px; margin-bottom: 8px; }
-        p { color: #888; font-size: 14px; }
-        #qrcode { background: #fff; padding: 15px; border-radius: 12px; display: inline-block; margin: 20px auto; }
-        #statusMessage { font-size: 18px; color: #666; position: absolute; text-align: center; padding: 20px; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        body { margin: 0; background-color: #030712; color: #f3f4f6; display: flex; height: 100vh; font-family: 'Inter', system-ui, -apple-system, sans-serif; overflow: hidden; }
+        .main-screen { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; background: radial-gradient(circle at center, #111827 0%, #030712 100%); }
+        #slideImage { max-width: 88%; max-height: 88%; object-fit: contain; border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.9); animation: fadeIn 0.8s ease-in-out; }
+        
+        /* Panel Lateral Minimalista */
+        .side-panel { width: 320px; background: rgba(17, 24, 39, 0.75); backdrop-filter: blur(12px); border-left: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; justify-content: space-between; padding: 35px 25px; box-sizing: border-box; text-align: center; z-index: 10; }
+        h2 { color: #60a5fa; font-size: 20px; font-weight: 600; margin-bottom: 6px; letter-spacing: -0.5px; }
+        p { color: #9ca3af; font-size: 13px; line-height: 1.4; margin: 0; }
+        
+        /* QR No Invasivo */
+        .qr-container { background: #ffffff; padding: 10px; border-radius: 10px; display: inline-block; margin: 15px auto; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        
+        /* Controles Flotantes de Presentación */
+        .controls-overlay { position: absolute; bottom: 25px; display: flex; gap: 12px; background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(8px); padding: 8px 16px; border-radius: 30px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 8px 25px rgba(0,0,0,0.6); z-index: 5; }
+        .ctrl-btn { background: transparent; border: none; color: #fff; font-size: 14px; cursor: pointer; padding: 8px 14px; border-radius: 20px; transition: background 0.2s, transform 0.1s; display: flex; align-items: center; gap: 6px; font-weight: 500; }
+        .ctrl-btn:hover { background: rgba(59, 130, 246, 0.25); color: #60a5fa; }
+        .ctrl-btn:active { transform: scale(0.95); }
+
+        #statusMessage { font-size: 16px; color: #9ca3af; position: absolute; text-align: center; padding: 20px; font-weight: 500; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
 <body>
 
     <div class="main-screen">
-        <div id="statusMessage">Cargando transmisión...</div>
+        <div id="statusMessage">Cargando transmisión en vivo...</div>
         <img id="slideImage" src="" alt="Foto en vivo" style="display:none;">
+
+        <!-- Controles multimedia elegantes -->
+        <div class="controls-overlay" id="controlsBar" style="display:none;">
+            <button class="ctrl-btn" onclick="prevPhoto()">⏮ Anterior</button>
+            <button class="ctrl-btn" id="pausePlayBtn" onclick="togglePause()">⏸ Pausar</button>
+            <button class="ctrl-btn" onclick="nextPhoto()">Siguiente ⏭</button>
+        </div>
     </div>
 
     <div class="side-panel">
         <div>
             <h2 id="galleryTitle">QGallery</h2>
-            <p>Escanea para unirte y subir tus fotos al instante</p>
+            <p>Escanea para unirte al evento y ver tus fotos proyectadas</p>
         </div>
-        <div id="qrcode"></div>
+        <div style="margin: auto 0;">
+            <div class="qr-container" id="qrcode"></div>
+            <p style="font-size: 11px; color: #6b7280; margin-top: 6px;">📷 Escanea con tu cámara</p>
+        </div>
         <div>
-            <p style="font-size: 11px;">Sincronizado en tiempo real</p>
+            <p style="font-size: 11px; color: #4b5563;">Sincronizado en tiempo real ✨</p>
         </div>
     </div>
 
@@ -49,6 +70,7 @@
         let photos = [];
         let currentIndex = 0;
         let slideInterval = null;
+        let isPaused = false;
 
         async function init() {
             const statusEl = document.getElementById('statusMessage');
@@ -59,7 +81,6 @@
             }
 
             try {
-                // 1. Obtener la información de la galería
                 const { data: gallery, error: galError } = await client
                     .from('galleries')
                     .select('title, qr_token')
@@ -74,20 +95,17 @@
                 if (gallery) {
                     document.getElementById('galleryTitle').innerText = gallery.title || "Galería en Vivo";
                     
-                    // Generar el código QR con el token o ID
-                    const qrText = gallery.qr_token ? gallery.qr_token : galleryId;
+                    const qrText = "https://samir22bot6.github.io/qgallery-tv/join.html?token=" + (gallery.qr_token ? gallery.qr_token : galleryId);
                     document.getElementById("qrcode").innerHTML = "";
                     new QRCode(document.getElementById("qrcode"), {
                         text: qrText,
-                        width: 170,
-                        height: 170
+                        width: 130,
+                        height: 130
                     });
                 }
 
-                // 2. Cargar las fotos aprobadas iniciales
                 await loadApprovedPhotos();
 
-                // 3. Escuchar cambios en tiempo real (WebSockets de Supabase para nuevas fotos o aprobaciones)
                 client.channel('public:photos')
                     .on('postgres_changes', { 
                         event: '*', 
@@ -125,28 +143,67 @@
                 statusEl.style.display = 'none';
                 
                 const imgElement = document.getElementById('slideImage');
+                const controlsBar = document.getElementById('controlsBar');
+
                 if (imgElement.style.display === 'none') {
                     imgElement.style.display = 'block';
-                    showNextPhoto();
+                    controlsBar.style.display = 'flex';
+                    showPhoto(currentIndex);
                     startSlideshow();
                 }
             } else {
                 statusEl.style.display = 'block';
                 statusEl.innerText = "Esperando fotos aprobadas...";
                 document.getElementById('slideImage').style.display = 'none';
+                document.getElementById('controlsBar').style.display = 'none';
             }
         }
 
-        function showNextPhoto() {
+        function showPhoto(index) {
             if (photos.length === 0) return;
+            currentIndex = (index + photos.length) % photos.length;
             const imgElement = document.getElementById('slideImage');
+            imgElement.style.animation = 'none';
+            imgElement.offsetHeight; // Trigger reflow
+            imgElement.style.animation = 'fadeIn 0.8s ease-in-out';
             imgElement.src = photos[currentIndex];
-            currentIndex = (currentIndex + 1) % photos.length;
+        }
+
+        function nextPhoto() {
+            showPhoto(currentIndex + 1);
+            resetTimer();
+        }
+
+        function prevPhoto() {
+            showPhoto(currentIndex - 1);
+            resetTimer();
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = document.getElementById('pausePlayBtn');
+            if (isPaused) {
+                clearInterval(slideInterval);
+                btn.innerText = "▶ Reanudar";
+            } else {
+                startSlideshow();
+                btn.innerText = "⏸ Pausar";
+            }
         }
 
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
-            slideInterval = setInterval(showNextPhoto, 5000); // Cambia de foto cada 5 segundos
+            if (!isPaused) {
+                slideInterval = setInterval(() => {
+                    showPhoto(currentIndex + 1);
+                }, 5000);
+            }
+        }
+
+        function resetTimer() {
+            if (!isPaused) {
+                startSlideshow();
+            }
         }
 
         init();
