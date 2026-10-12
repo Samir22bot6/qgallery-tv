@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QGallery - Únete al Evento</title>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b0f19; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; text-align: center; box-sizing: border-box; }
+        .card { background: #111827; padding: 35px 25px; border-radius: 20px; max-width: 400px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.8); border: 1px solid #1f2937; }
+        h1 { font-size: 22px; color: #60a5fa; margin-bottom: 10px; }
+        p { color: #9ca3af; font-size: 14px; margin-bottom: 28px; line-height: 1.5; }
+        .btn { display: block; width: 100%; padding: 14px; background: #3b82f6; color: white; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 15px; margin-bottom: 14px; box-sizing: border-box; transition: background 0.2s; box-shadow: 0 4px 12px rgba(59, 130, 246,.4); }
+        .btn:hover { background: #2563eb; }
+        .footer-note { font-size: 12px; color: #6b7280; margin-top: 15px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1 id="galleryTitle">Cargando evento...</h1>
+        <p id="gallerySubject">Conectando con la galería en Supabase...</p>
+        
+        <!-- Reemplaza el enlace href con el link de descarga directa de tu APK (Ej. GitHub Releases o Supabase Storage) -->
+        <a id="downloadBtn" href="https://github.com/tu-usuario/tu-repo/releases/download/v1.0/app-release.apk" class="btn">📥 Descargar QGallery (APK)</a>
+        
+        <p class="footer-note">¿Ya tienes la app? Inicia sesión y escanea este código desde la sección de la cámara para ingresar al instante.</p>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://okbiomrgknyiseglfnih.supabase.co';
+        const SUPABASE_ANON_KEY = 'TU_SUPABASE_ANON_KEY'; // Usa tu llave anon real
+        const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const qrToken = urlParams.get('token');
+
+        async function loadGalleryInfo() {
+            if (!qrToken) {
+                document.getElementById('galleryTitle').innerText = "Enlace no válido";
+                document.getElementById('gallerySubject').innerText = "El código QR no contiene un token de galería correcto.";
+                return;
+            }
+
+            const { data, error } = await client
+                .from('galleries')
+                .select('title, subject')
+                .eq('qr_token', qrToken)
+                .single();
+
+            if (data) {
+                document.getElementById('galleryTitle').innerText = data.title;
+                document.getElementById('gallerySubject').innerText = data.subject || "Sube tus mejores fotos y participa en esta galería interactiva.";
+            } else {
+                document.getElementById('galleryTitle').innerText = "Galería no encontrada";
+                document.getElementById('gallerySubject').innerText = "Es posible que este evento haya finalizado o el código sea incorrecto.";
+            }
+        }
+
+        loadGalleryInfo();
+    </script>
+</body>
+</html>
